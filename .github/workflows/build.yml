@@ -1,0 +1,48 @@
+name: Build & Release
+
+on:
+  push:
+    branches: [master]
+  pull_request:
+    branches: [master]
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: windows-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup .NET 8
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.0.x'
+
+      - name: Restore dependencies
+        run: dotnet restore ExcelMerge.sln
+
+      - name: Build Release
+        run: dotnet build ExcelMerge.sln -c Release --no-restore
+
+      - name: Run tests
+        run: |
+          dotnet test NetDiff/NetDiff.Test/NetDiff.Test.csproj --no-build -c Release
+          dotnet test E2ETest/E2ETest.csproj --no-build -c Release
+
+      - name: Publish win-x64
+        run: >
+          dotnet publish ExcelMerge.GUI/ExcelMerge.GUI.csproj
+          -c Release
+          -r win-x64
+          --self-contained
+          -p:PublishSingleFile=true
+          -p:IncludeNativeLibrariesForSelfExtract=true
+          -o publish/win-x64
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ExcelMerge-win-x64
+          path: publish/win-x64/
+          retention-days: 30
