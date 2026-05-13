@@ -242,4 +242,5 @@ ModelManifest.xml
 .paket/paket.exe
 
 # FAKE - F# Make
-.fake/
+.fake/ExcelMerge-win-x64.zip
+ExcelMerge-win-x64/

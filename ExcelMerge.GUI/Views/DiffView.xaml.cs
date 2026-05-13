@@ -30,6 +30,9 @@ namespace ExcelMerge.GUI.Views
         private const string baseKey = "base";
         private readonly SearchService searchService = new SearchService();
 
+        private ExcelWorkbook _srcWorkbook;
+        private ExcelWorkbook _dstWorkbook;
+
         public DiffView()
         {
             InitializeComponent();
@@ -404,6 +407,8 @@ namespace ExcelMerge.GUI.Views
 
             var srcWorkbook = workbooks.Item1;
             var dstWorkbook = workbooks.Item2;
+            _srcWorkbook = srcWorkbook;
+            _dstWorkbook = dstWorkbook;
 
             // Always sync ComboBox items from actual workbooks
             SrcSheetCombobox.ItemsSource = srcWorkbook.Sheets.Keys.ToList();
@@ -752,6 +757,41 @@ namespace ExcelMerge.GUI.Views
             ValueTextBoxEventDispatcher.Instance.DispatchScrolledEvent(args, (ScrollChangedEventArgs)e);
         }
 
+        private bool SwitchToNextSheetWithDiff(bool forward)
+        {
+            if (_srcWorkbook == null || _dstWorkbook == null) return false;
+
+            var currentSheetIndex = SrcSheetCombobox.SelectedIndex;
+            var sheetCount = Math.Min(_srcWorkbook.Sheets.Count, _dstWorkbook.Sheets.Count);
+
+            for (int i = 1; i < sheetCount; i++)
+            {
+                var nextIndex = forward
+                    ? (currentSheetIndex + i) % sheetCount
+                    : (currentSheetIndex - i + sheetCount) % sheetCount;
+
+                var srcSheetName = _srcWorkbook.Sheets.Keys.ElementAtOrDefault(nextIndex);
+                var dstSheetName = _dstWorkbook.Sheets.Keys.ElementAtOrDefault(nextIndex);
+                if (srcSheetName == null || dstSheetName == null) continue;
+
+                var srcSheet = _srcWorkbook.Sheets[srcSheetName];
+                var dstSheet = _dstWorkbook.Sheets[dstSheetName];
+
+                var diff = ExcelSheet.Diff(srcSheet, dstSheet, diffConfig);
+                var summary = diff.CreateSummary();
+                if (summary.HasDiff)
+                {
+                    // Switch to this sheet — update ComboBox and re-execute diff
+                    SrcSheetCombobox.SelectedIndex = nextIndex;
+                    DstSheetCombobox.SelectedIndex = nextIndex;
+                    ExecuteDiff();
+                    return true;
+                }
+            }
+
+            return false;
+        }
+
         private void NextModifiedCellButton_Click(object sender, RoutedEventArgs e)
         {
             MoveNextModifiedCell();
@@ -760,7 +800,9 @@ namespace ExcelMerge.GUI.Views
         private void MoveNextModifiedCell()
         {
             if (!ValidateDataGrids()) return;
-            DiffNavigator.Navigate(SrcDataGrid, (m, c) => m.GetNextModifiedCell(c));
+            var navigated = DiffNavigator.Navigate(SrcDataGrid, (m, c) => m.GetNextModifiedCell(c));
+            if (!navigated && SwitchToNextSheetWithDiff(true))
+                DiffNavigator.Navigate(SrcDataGrid, (m, c) => m.GetNextModifiedCell(FastGridCellAddress.Empty));
         }
 
         private void PrevModifiedCellButton_Click(object sender, RoutedEventArgs e) => MovePrevModifiedCell();
@@ -768,7 +810,13 @@ namespace ExcelMerge.GUI.Views
         private void MovePrevModifiedCell()
         {
             if (!ValidateDataGrids()) return;
-            DiffNavigator.Navigate(SrcDataGrid, (m, c) => m.GetPreviousModifiedCell(c));
+            var navigated = DiffNavigator.Navigate(SrcDataGrid, (m, c) => m.GetPreviousModifiedCell(c));
+            if (!navigated && SwitchToNextSheetWithDiff(false))
+            {
+                var model = SrcDataGrid.Model as DiffGridModel;
+                var lastCell = new FastGridCellAddress(model.RowCount - 1, model.ColumnCount - 1);
+                DiffNavigator.Navigate(SrcDataGrid, (m, c) => m.GetPreviousModifiedCell(lastCell));
+            }
         }
 
         private void NextModifiedRowButton_Click(object sender, RoutedEventArgs e) => MoveNextModifiedRow();
@@ -776,7 +824,9 @@ namespace ExcelMerge.GUI.Views
         private void MoveNextModifiedRow()
         {
             if (!ValidateDataGrids()) return;
-            DiffNavigator.Navigate(SrcDataGrid, (m, c) => m.GetNextModifiedRow(c));
+            var navigated = DiffNavigator.Navigate(SrcDataGrid, (m, c) => m.GetNextModifiedRow(c));
+            if (!navigated && SwitchToNextSheetWithDiff(true))
+                DiffNavigator.Navigate(SrcDataGrid, (m, c) => m.GetNextModifiedRow(FastGridCellAddress.Empty));
         }
 
         private void PrevModifiedRowButton_Click(object sender, RoutedEventArgs e) => MovePrevModifiedRow();
@@ -784,7 +834,13 @@ namespace ExcelMerge.GUI.Views
         private void MovePrevModifiedRow()
         {
             if (!ValidateDataGrids()) return;
-            DiffNavigator.Navigate(SrcDataGrid, (m, c) => m.GetPreviousModifiedRow(c));
+            var navigated = DiffNavigator.Navigate(SrcDataGrid, (m, c) => m.GetPreviousModifiedRow(c));
+            if (!navigated && SwitchToNextSheetWithDiff(false))
+            {
+                var model = SrcDataGrid.Model as DiffGridModel;
+                var lastCell = new FastGridCellAddress(model.RowCount - 1, model.ColumnCount - 1);
+                DiffNavigator.Navigate(SrcDataGrid, (m, c) => m.GetPreviousModifiedRow(lastCell));
+            }
         }
 
         private void NextAddedRowButton_Click(object sender, RoutedEventArgs e) => MoveNextAddedRow();
@@ -792,7 +848,9 @@ namespace ExcelMerge.GUI.Views
         private void MoveNextAddedRow()
         {
             if (!ValidateDataGrids()) return;
-            DiffNavigator.Navigate(SrcDataGrid, (m, c) => m.GetNextAddedRow(c));
+            var navigated = DiffNavigator.Navigate(SrcDataGrid, (m, c) => m.GetNextAddedRow(c));
+            if (!navigated && SwitchToNextSheetWithDiff(true))
+                DiffNavigator.Navigate(SrcDataGrid, (m, c) => m.GetNextAddedRow(FastGridCellAddress.Empty));
         }
 
         private void PrevAddedRowButton_Click(object sender, RoutedEventArgs e) => MovePrevAddedRow();
@@ -800,7 +858,13 @@ namespace ExcelMerge.GUI.Views
         private void MovePrevAddedRow()
         {
             if (!ValidateDataGrids()) return;
-            DiffNavigator.Navigate(SrcDataGrid, (m, c) => m.GetPreviousAddedRow(c));
+            var navigated = DiffNavigator.Navigate(SrcDataGrid, (m, c) => m.GetPreviousAddedRow(c));
+            if (!navigated && SwitchToNextSheetWithDiff(false))
+            {
+                var model = SrcDataGrid.Model as DiffGridModel;
+                var lastCell = new FastGridCellAddress(model.RowCount - 1, model.ColumnCount - 1);
+                DiffNavigator.Navigate(SrcDataGrid, (m, c) => m.GetPreviousAddedRow(lastCell));
+            }
         }
 
         private void NextRemovedRowButton_Click(object sender, RoutedEventArgs e) => MoveNextRemovedRow();
@@ -808,22 +872,23 @@ namespace ExcelMerge.GUI.Views
         private void MoveNextRemovedRow()
         {
             if (!ValidateDataGrids()) return;
-            DiffNavigator.Navigate(SrcDataGrid, (m, c) => m.GetNextRemovedRow(c));
+            var navigated = DiffNavigator.Navigate(SrcDataGrid, (m, c) => m.GetNextRemovedRow(c));
+            if (!navigated && SwitchToNextSheetWithDiff(true))
+                DiffNavigator.Navigate(SrcDataGrid, (m, c) => m.GetNextRemovedRow(FastGridCellAddress.Empty));
         }
 
         private void PrevRemovedRowButton_Click(object sender, RoutedEventArgs e) => MovePrevRemovedRow();
 
         private void MovePrevRemovedRow()
         {
-            if (!ValidateDataGrids())
-                return;
-
-            var nextCell = (SrcDataGrid.Model as DiffGridModel).GetPreviousRemovedRow(
-                SrcDataGrid.CurrentCell.IsEmpty ? FastGridCellAddress.Zero : SrcDataGrid.CurrentCell);
-            if (nextCell.IsEmpty)
-                return;
-
-            SrcDataGrid.CurrentCell = nextCell;
+            if (!ValidateDataGrids()) return;
+            var navigated = DiffNavigator.Navigate(SrcDataGrid, (m, c) => m.GetPreviousRemovedRow(c));
+            if (!navigated && SwitchToNextSheetWithDiff(false))
+            {
+                var model = SrcDataGrid.Model as DiffGridModel;
+                var lastCell = new FastGridCellAddress(model.RowCount - 1, model.ColumnCount - 1);
+                DiffNavigator.Navigate(SrcDataGrid, (m, c) => m.GetPreviousRemovedRow(lastCell));
+            }
         }
 
         private void PrevMatchCellButton_Click(object sender, RoutedEventArgs e)

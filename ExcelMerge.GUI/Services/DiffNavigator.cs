@@ -18,12 +18,13 @@ namespace ExcelMerge.GUI.Services
         /// A function that receives the grid's DiffGridModel and the current cell address,
         /// and returns the target cell address (or Empty if none found).
         /// </param>
-        public static void Navigate(
+        /// <returns>True if navigation succeeded (target found), false otherwise.</returns>
+        public static bool Navigate(
             FastGridControl grid,
             Func<DiffGridModel, FastGridCellAddress, FastGridCellAddress> getTarget)
         {
             var model = grid?.Model as DiffGridModel;
-            if (model == null) return;
+            if (model == null) return false;
 
             var current = grid.CurrentCell.IsEmpty
                 ? FastGridCellAddress.Zero
@@ -31,7 +32,11 @@ namespace ExcelMerge.GUI.Services
 
             var target = getTarget(model, current);
             if (!target.IsEmpty)
+            {
                 grid.CurrentCell = target;
+                return true;
+            }
+            return false;
         }
     }
 }
